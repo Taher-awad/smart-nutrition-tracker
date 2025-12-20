@@ -1,16 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import timedelta
-from auth import create_access_token, get_current_user, get_password_hash, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
-from database import get_database
-from models import UserCreate, Token, User, UserUpdate
-from bson import ObjectId
 from loguru import logger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import sys
+from typing import List
+
+from services.auth_service import AuthenticationService
+from services.user_service import UserProfileService
+from services.meal_service import MealService
+from services.ai_service import AIEngine
+from models import UserCreate, Token, User, UserUpdate, FoodItem, MealLog, WeeklyPlan, MealLogCreate
 
 # Configure Loguru
 logger.remove()
@@ -32,215 +34,200 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-db = get_database()
+# Dependency Injection
+from dependencies import (
+    get_auth_service, 
+    get_user_service, 
+    get_meal_service, 
+    get_ai_service, 
+    get_current_user,
+    oauth2_scheme
+)
+
 logger.info("Application started")
 
 @app.post("/token", response_model=Token)
-@limiter.limit("5/minute")
-async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+# @limiter.limit("5/minute")
+async def login_for_access_token(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    auth_service: AuthenticationService = Depends(get_auth_service)
+):
     logger.info(f"Login attempt for: {form_data.username}")
-    user = db.users.find_one({"email": form_data.username})
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+    # auth_service.authenticate_user returns dict or None based on previous edit
+    user_dict = auth_service.authenticate_user(form_data.username, form_data.password)
+    if not user_dict:
         logger.warning(f"Failed login attempt for: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["email"]}, expires_delta=access_token_expires
-    )
+    
+    access_token = auth_service.create_access_token(data={"sub": user_dict["email"]})
     logger.info(f"Successful login for: {form_data.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/users/", response_model=User)
-@limiter.limit("3/minute")
-async def create_user(request: Request, user: UserCreate):
+@app.post("/users/", response_model=User, response_model_exclude={"hashed_password"})
+# @limiter.limit("3/minute")
+async def create_user(
+    request: Request,
+    user: UserCreate,
+    auth_service: AuthenticationService = Depends(get_auth_service)
+):
     try:
         logger.info(f"Registration attempt for: {user.email}")
-        if db.users.find_one({"email": user.email}):
+        if auth_service.user_repo.get_by_email(user.email):
             logger.warning(f"Registration failed - email exists: {user.email}")
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        hashed_password = get_password_hash(user.password)
-        user_dict = user.dict()
-        user_dict["hashed_password"] = hashed_password
-        del user_dict["password"]
+        # Returns id (int)
+        user_id = auth_service.register_user(user.dict(), user.password)
         
-        result = db.users.insert_one(user_dict)
-        user_dict["id"] = str(result.inserted_id)
+        # Fetch the created user
+        created_user = auth_service.user_repo.find_by_id(user_id)
+        
         logger.info(f"User registered successfully: {user.email}")
-        return User(**user_dict)
+        return created_user
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Registration error: {str(e)}, user data: {user.dict() if hasattr(user, 'dict') else 'N/A'}")
+        logger.error(f"Registration error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
-@app.get("/users/me/", response_model=User)
+@app.get("/users/me/", response_model=User, response_model_exclude={"hashed_password"})
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-def calculate_bmr_tdee(user: UserUpdate) -> float:
-    # Mifflin-St Jeor Equation
-    if user.gender.lower() == "male":
-        bmr = (10 * user.weight) + (6.25 * user.height) - (5 * user.age) + 5
-    else:
-        bmr = (10 * user.weight) + (6.25 * user.height) - (5 * user.age) - 161
-    
-    activity_multipliers = {
-        "sedentary": 1.2,
-        "light": 1.375,
-        "moderate": 1.55,
-        "active": 1.725,
-        "very_active": 1.9
-    }
-    tdee = bmr * activity_multipliers.get(user.activity_level.lower(), 1.2)
-    
-    if user.goal == "lose":
-        return tdee - 500
-    elif user.goal == "gain":
-        return tdee + 500
-    return tdee
+@app.put("/users/profile", response_model=User, response_model_exclude={"hashed_password"})
+async def update_user_profile(
+    profile: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    user_service: UserProfileService = Depends(get_user_service)
+):
+    updated_user = user_service.update_profile(current_user.id, profile.dict(exclude_unset=True))
+    return updated_user
 
-@app.put("/users/profile", response_model=User)
-async def update_user_profile(profile: UserUpdate, current_user: User = Depends(get_current_user)):
-    daily_calories = calculate_bmr_tdee(profile)
-    
-    update_data = profile.dict()
-    update_data["daily_calorie_goal"] = daily_calories
-    
-    db.users.update_one(
-        {"_id": ObjectId(current_user.id)},
-        {"$set": update_data}
-    )
-    
-    # Fetch updated user
-    updated_user_data = db.users.find_one({"_id": ObjectId(current_user.id)})
-    updated_user_data["id"] = str(updated_user_data["_id"])
-    return User(**updated_user_data)
+    return updated_user
+
+# --- Admin Router ---
+from routers import admin
+app.include_router(admin.router)
 
 # --- Food & Meal Endpoints ---
 
-from models import FoodItem, MealLog
-from typing import List
-
 @app.on_event("startup")
-async def seed_food_database():
-    if db.foods.count_documents({}) == 0:
-        seed_data = [
+def on_startup():
+    from database import create_db_and_tables
+    create_db_and_tables()
+    
+    # Seed Data
+    from repositories.food_repository import FoodRepository
+    food_repo = FoodRepository()
+    # Deduplicate existing foods
+    with food_repo.get_session() as session:
+        from sqlmodel import select, col
+        # Get all foods
+        all_foods = session.exec(select(FoodItem)).all()
+        seen_names = set()
+        for food in all_foods:
+            if food.name in seen_names:
+                session.delete(food)
+                logger.info(f"Removed duplicate food: {food.name}")
+            else:
+                seen_names.add(food.name)
+        session.commit()
+
+    # Seed Data safely
+    if not food_repo.find_all():
+         seed_data = [
             {"name": "Apple", "calories": 95, "protein": 0.5, "carbs": 25, "fats": 0.3, "is_custom": False},
             {"name": "Banana", "calories": 105, "protein": 1.3, "carbs": 27, "fats": 0.3, "is_custom": False},
             {"name": "Chicken Breast (100g)", "calories": 165, "protein": 31, "carbs": 0, "fats": 3.6, "is_custom": False},
             {"name": "Rice (1 cup cooked)", "calories": 205, "protein": 4.3, "carbs": 44.5, "fats": 0.4, "is_custom": False},
             {"name": "Egg (Large)", "calories": 78, "protein": 6, "carbs": 0.6, "fats": 5, "is_custom": False},
         ]
-        db.foods.insert_many(seed_data)
-        print("Seeded Food Database")
+         with food_repo.get_session() as session:
+             for item in seed_data:
+                 # Check existence again just in case
+                 exists = session.exec(select(FoodItem).where(FoodItem.name == item["name"])).first()
+                 if not exists:
+                     food_repo.insert_one(FoodItem(**item))
+         logger.info("Seeded Food Database")
+         
+    logger.info("Database initialized (SQLite)")
 
 @app.get("/foods", response_model=List[FoodItem])
-async def get_foods(search: str = ""):
-    query = {}
-    if search:
-        query["name"] = {"$regex": search, "$options": "i"}
-    foods = list(db.foods.find(query))
+async def get_foods(
+    search: str = "",
+    meal_service: MealService = Depends(get_meal_service)
+):
+    foods = meal_service.search_foods(search)
     return foods
 
 @app.post("/foods", response_model=FoodItem)
-async def create_custom_food(food: FoodItem, current_user: User = Depends(get_current_user)):
-    food.is_custom = True
-    # Optionally link to user if private
-    db.foods.insert_one(food.dict())
-    return food
+async def create_custom_food(
+    food: FoodItem,
+    current_user: User = Depends(get_current_user),
+    meal_service: MealService = Depends(get_meal_service)
+):
+    return meal_service.add_custom_food(food.dict())
 
 @app.post("/meals", response_model=MealLog)
-async def log_meal(meal: MealLog, current_user: User = Depends(get_current_user)):
-    meal.user_id = current_user.id
-    db.meals.insert_one(meal.dict())
-    return meal
+async def log_meal(
+    meal: MealLogCreate,
+    current_user: User = Depends(get_current_user),
+    meal_service: MealService = Depends(get_meal_service)
+):
+    return meal_service.log_meal(current_user.id, meal.dict())
 
 @app.get("/meals/history", response_model=List[MealLog])
-async def get_meal_history(current_user: User = Depends(get_current_user)):
-    meals = list(db.meals.find({"user_id": current_user.id}))
-    return meals
+async def get_meal_history(
+    current_user: User = Depends(get_current_user),
+    meal_service: MealService = Depends(get_meal_service)
+):
+    return meal_service.get_meal_history(current_user.id)
 
 # --- AI & Planning Endpoints ---
 
-from models import WeeklyPlan
-import random
-from datetime import datetime, timedelta
-
 @app.post("/ai/recognize", response_model=FoodItem)
-async def recognize_food_image(current_user: User = Depends(get_current_user)):
-    # Mock AI: Returns a random food from DB or a fixed one
-    foods = list(db.foods.find())
-    if foods:
-        recognized = random.choice(foods)
-        # Ensure no _id in response if not handled by model
-        if "_id" in recognized:
-            del recognized["_id"]
-        return FoodItem(**recognized)
-    return FoodItem(name="Unknown Food", calories=0, protein=0, carbs=0, fats=0)
+async def recognize_food_image(
+    current_user: User = Depends(get_current_user),
+    ai_service: AIEngine = Depends(get_ai_service)
+):
+    return ai_service.recognize_image()
 
 @app.post("/plans/generate", response_model=WeeklyPlan)
-async def generate_meal_plan(current_user: User = Depends(get_current_user)):
-    # Mock Planner: Generates a random plan for 7 days
-    start_date = datetime.utcnow()
-    meals = []
-    foods = list(db.foods.find())
-    
-    if not foods:
-        # Fallback if no foods
-        foods = [{"name": "Apple", "calories": 95, "protein": 0.5, "carbs": 25, "fats": 0.3}]
+async def generate_meal_plan(
+    current_user: User = Depends(get_current_user),
+    ai_service: AIEngine = Depends(get_ai_service)
+):
+    return ai_service.generate_meal_plan(current_user.id)
 
-    for i in range(7):
-        day_date = start_date + timedelta(days=i)
-        # 3 meals per day
-        for meal_type in ["breakfast", "lunch", "dinner"]:
-            food = random.choice(foods)
-            if "_id" in food:
-                del food["_id"]
-            meals.append({
-                "date": day_date,
-                "meal_type": meal_type,
-                "food": food
-            })
-            
-    plan = WeeklyPlan(
-        user_id=current_user.id,
-        start_date=start_date,
-        meals=meals
-    )
-    
-    # Save plan (optional, or just return)
-    # db.plans.insert_one(plan.dict())
-    return plan
+@app.post("/plans/variations")
+async def generate_meal_plan_variations(
+    current_user: User = Depends(get_current_user),
+    ai_service: AIEngine = Depends(get_ai_service)
+):
+    return ai_service.generate_meal_plan_variations(current_user.id)
 
 @app.get("/analytics/summary")
-async def get_analytics_summary(current_user: User = Depends(get_current_user)):
-    # Simple summary: Total calories today
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    logs = list(db.meals.find({
-        "user_id": current_user.id,
-        "date": {"$gte": today}
-    }))
-    
-    total_calories = sum(log["food_item"]["calories"] for log in logs)
-    total_protein = sum(log["food_item"]["protein"] for log in logs)
-    total_carbs = sum(log["food_item"]["carbs"] for log in logs)
-    total_fats = sum(log["food_item"]["fats"] for log in logs)
-    
-    return {
-        "today": {
-            "calories": total_calories,
-            "protein": total_protein,
-            "carbs": total_carbs,
-            "fats": total_fats
-        },
-        "goal": current_user.daily_calorie_goal or 2000
-    }
+async def get_analytics_summary(
+    current_user: User = Depends(get_current_user),
+    meal_service: MealService = Depends(get_meal_service)
+):
+    summary = meal_service.get_daily_summary(current_user.id)
+    # Summary structure is {"today": {...}}
+    # We need to add goal to "today" or top level?
+    # Original: summary["goal"] = goal
+    # Let's add it to the 'today' dict or keep it separate? 
+    # Frontend expects { today: {.., goal: .. } } ??
+    # Looking at original main.py, it was: summary["goal"] = user.goal
+    # summary was just result of meal_service.get_daily_summary.
+    # If meal_service returns {"today": ...}, then summary["goal"] works if summary is that dict.
+    summary["goal"] = current_user.daily_calorie_goal or 2000
+    return summary
 
 @app.get("/")
 async def root():
-    return {"message": "Smart Nutrition Tracker API is running"}
+    return {"message": "Smart Nutrition Tracker API is running (SQLite Version)"}

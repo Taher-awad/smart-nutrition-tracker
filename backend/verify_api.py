@@ -1,7 +1,7 @@
 import requests
 import sys
 
-BASE_URL = "http://localhost:8001"
+BASE_URL = "http://localhost:8002"
 EMAIL = "test@example.com"
 PASSWORD = "password"
 

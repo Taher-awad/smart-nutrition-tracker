@@ -1,0 +1,35 @@
+1-
+
+Using the following project description, build a complete Python backend project using FastAPI. The resulting code must be fully functional and adhere strictly to the project's core requirements, using industry best practices for structure (e.g., separating concerns into routers, services/managers, and models). You are permitted to add necessary boilerplate (like configuration files, dependency management, logging) but you must not remove, alter, or ignore any core functionality or data model specified in the description. Provide the complete file structure and initial code for all components, focusing on the minimum viable implementation.
+
+
+
+2-
+Analyze the current state of the project against the following list of detailed requirements.
+
+    First, generate a validation report listing which requirements are fully satisfied, partially satisfied, or completely unmet.
+
+    For any unmet or partially met requirements, create a concise, prioritized update plan detailing the files and functions that need modification.
+
+    Finally, implement the update plan by providing the complete, modified code for the affected files. Ensure all original, satisfied functionality remains intact.
+    
+    
+3-
+Review the current project functionality against the following set of user stories.
+
+    Verify if the necessary functionality to support each user story already exists.
+
+    If a user story is not supported, formulate the required new feature(s) or modification(s) needed, and then implement the change.
+
+    The final output must be the complete, updated code files that fully satisfy the described user stories.
+
+
+4-
+
+Using the provided class diagram in @class.json , refactor the existing project to align with this new architectural style.
+
+    Core Requirement: The refactored project must strictly adhere to the object relationships, method signatures, and communication flow rules defined in the diagram.
+
+    Flexibility: You are permitted to use idiomatic Python/FastAPI structures where a direct 1:1 mapping is impractical (e.g., using Pydantic models for data transfer objects) as long as the underlying logic and structure align with the class diagram's intent.
+
+    Implementation: Provide the complete, refactored code for all files necessary to implement the new structure, ensuring 100% functional parity with the previous version—no existing functionality should be broken or lost in the refactoring process.

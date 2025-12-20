@@ -1,11 +1,15 @@
-from pymongo import MongoClient
+from sqlmodel import SQLModel, create_engine, Session
 import os
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME = "smart_nutrition_tracker"
+# Create engine
+sqlite_file_name = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
 
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
+engine = create_engine(sqlite_url, echo=True)
 
-def get_database():
-    return db
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+def get_session():
+    with Session(engine) as session:
+        yield session

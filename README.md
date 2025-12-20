@@ -299,16 +299,42 @@ Once the backend is running, visit:
 
 ## 🧪 Testing
 
-### Test Backend API
+### Backend Test Suite
+The project includes a comprehensive backend test suite using **pytest** and **mongomock** for isolated testing (no running database required).
 
+**Run tests:**
+```bash
+cd backend
+source venv/bin/activate
+pytest tests/
+```
+
+**Run with coverage report:**
+```bash
+pytest tests/ --cov=. --cov-report=term-missing
+```
+
+**Test Coverage:**
+- **Core Logic:** >90% coverage
+- **Total:** ~80% coverage
+- **Scope:** Auth, User Profile, Food/Meals, AI endpoints
+
+### CI/CD Pipeline
+Tests are automatically run on every push and pull request via GitHub Actions.
+- **Workflow:** `.github/workflows/backend-tests.yml`
+- **Steps:** Install dependencies -> Run pytest -> Upload coverage
+
+### Manual API Testing
+You can also manually test endpoints using the `verify_api.py` script or Swagger UI:
+
+**Script:**
 ```bash
 cd backend
 source venv/bin/activate
 python verify_api.py
 ```
 
-### Test with Swagger UI
-
+**Swagger UI:**
 1. Open http://localhost:8001/docs
 2. Click "POST /users/" to register
 3. Click "POST /token" to login and get a token

@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-pymongo
+sqlmodel
 transformers
 torch
 pillow
@@ -8,3 +8,10 @@ python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
 email-validator
+pytest
+pytest-cov
+httpx
+argon2-cffi
+loguru
+slowapi
+python-dotenv
