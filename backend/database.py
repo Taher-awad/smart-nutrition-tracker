@@ -2,8 +2,7 @@ from sqlmodel import SQLModel, create_engine, Session
 import os
 
 # Create engine
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+sqlite_url = os.getenv("DATABASE_URL", "sqlite:///database.db")
 
 engine = create_engine(sqlite_url, echo=True)
 

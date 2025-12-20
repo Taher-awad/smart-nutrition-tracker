@@ -12,3 +12,4 @@ mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/.pub/
 pcadmin_accessKeys.csv
+*.pem

@@ -5,10 +5,12 @@ services:
     build: ./backend
     container_name: nutrition_backend
     restart: always
+    environment:
+      - DATABASE_URL=sqlite:///data/database.db
     ports:
       - "8001:8001"
     volumes:
-      - ./backend/database.db:/app/database.db
+      - nutrition_data:/app/data
 
   frontend:
     build: ./mobile
@@ -20,4 +22,4 @@ services:
       - backend
 
 volumes:
-  db_data:
+  nutrition_data:
