@@ -1,8 +1,9 @@
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:8001'; // Use 10.0.2.2 for Android Emulator if needed, but 127.0.0.1 works for Web
+  // Use relative path in production (Nginx proxy), absolute localhost in dev
+  static const String baseUrl = kReleaseMode ? '/api' : 'http://127.0.0.1:8001';
 
   static Future<String> login(String email, String password) async {
     try {

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: nutrition_backend
+    restart: always
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend/database.db:/app/database.db
+
+  frontend:
+    build: ./mobile
+    container_name: nutrition_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
