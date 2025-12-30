@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ApiService {
-  // Use relative path in production (Nginx proxy), absolute localhost in dev
-  static const String baseUrl = kReleaseMode ? '/api' : 'http://127.0.0.1:8001';
+  // Use absolute path for local testing with python http.server
+  static const String baseUrl = 'http://127.0.0.1:8005';
 
   static Future<String> login(String email, String password) async {
     try {
