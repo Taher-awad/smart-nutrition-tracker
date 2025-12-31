@@ -470,18 +470,4 @@ flutter pub get
 
 This project is open source and available under the MIT License.
 
----
 
-## 👨‍💻 Author
-
-**Taher Awad**
-- GitHub: [@Taher-awad](https://github.com/Taher-awad)
-
----
-
-## 🙏 Acknowledgments
-
-- FastAPI for the amazing backend framework
-- Flutter team for the cross-platform framework
-- fl_chart for beautiful charts
-- Cronometer & MyFitnessPal for UI inspiration
