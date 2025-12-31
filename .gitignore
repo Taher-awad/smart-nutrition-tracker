@@ -1,15 +1,36 @@
-venv/
+# General
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+venv/
 .env
 .pytest_cache/
 *.db
-*.log
-*.rar
-*.pdf
+*.pem
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
 mobile/build/
 mobile/.dart_tool/
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/.pub/
-pcadmin_accessKeys.csv
-*.pem
+
+dist/
+node_modules/
+coverage/
+*.rar
+*.pdf
