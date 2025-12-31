@@ -34,7 +34,7 @@ A full-stack nutrition tracking application with a FastAPI backend and Flutter m
 
 ### Backend
 - Python 3.11 or higher
-- Docker (for MongoDB)
+- pip and venv
 - pip and venv
 
 ### Mobile
@@ -87,30 +87,19 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Step 5: Start MongoDB with Docker
-
-```bash
-docker-compose up -d
-```
-
-This will start MongoDB on port 27017. Verify it's running:
-```bash
-docker ps
-```
-
-### Step 6: Configure Environment Variables
+### Step 5: Configure Environment Variables
 
 The `.env` file is already configured with secure defaults. You can modify it if needed:
 
 ```bash
 # backend/.env
 SECRET_KEY=your-super-secret-key-change-this-in-production
-MONGO_URI=mongodb://localhost:27017
+DATABASE_URL=sqlite:///database.db
 DATABASE_NAME=nutrition_tracker
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-### Step 7: Run the Backend Server
+### Step 6: Run the Backend Server
 
 ```bash
 uvicorn main:app --reload --port 8001
@@ -262,7 +251,7 @@ Edit `backend/.env` for environment-specific settings:
 
 ```env
 SECRET_KEY=your-secret-key-here
-MONGO_URI=mongodb://localhost:27017
+DATABASE_URL=sqlite:///database.db
 DATABASE_NAME=nutrition_tracker
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
@@ -350,7 +339,6 @@ python verify_api.py
 1. **Start Backend**:
    ```bash
    cd backend
-   docker-compose up -d
    source venv/bin/activate
    uvicorn main:app --reload --port 8001
    ```
@@ -386,9 +374,8 @@ smart-nutrition-tracker/
 │   ├── main.py              # FastAPI application
 │   ├── auth.py              # JWT authentication
 │   ├── models.py            # Pydantic models
-│   ├── database.py          # MongoDB connection
+│   ├── database.py          # SQLite connection
 │   ├── requirements.txt     # Python dependencies
-│   ├── docker-compose.yml   # MongoDB setup
 │   └── .env                 # Environment variables
 │
 └── mobile/
@@ -438,7 +425,7 @@ While `flutter run` is active, press:
 
 **Backend:**
 - FastAPI
-- MongoDB
+- SQLite (SQLModel)
 - Argon2-cffi
 - python-jose (JWT)
 - Loguru
@@ -456,12 +443,6 @@ While `flutter run` is active, press:
 ## 🐛 Troubleshooting
 
 ### Backend Issues
-
-**MongoDB connection failed:**
-```bash
-docker-compose down
-docker-compose up -d
-```
 
 **Port 8001 already in use:**
 ```bash
